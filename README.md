@@ -18,6 +18,7 @@ Options are as follows:
 Example Usage:
 
 `./target/release/files-to-prompt -d $(pwd) -e "rs,json" -l 50`
+
 `./target/release/files-to-prompt -d $(pwd) -e "rs,json" -l 50 | llm -s "Explain this sources code and show results in the table" -m gemini-1.5-pro-latest`
 
 
