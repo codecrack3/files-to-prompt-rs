@@ -20,6 +20,9 @@ Example Usage:
 `./target/release/gpt-review-code -d $(pwd) -e "rs,json" -l 50`
 `./target/release/gpt-review-code -d $(pwd) -e "rs,json" -l 50 | llm -s "Explain this sources code and show results in the table" -m gemini-1.5-pro-latest`
 
-Build:
 
+`./target/release/gpt-review-code -d mistral.rs/ -e "rs,json" -l 50` 
+![alt text](image.png)
+
+Build:
 cargo build --release
