@@ -3,7 +3,7 @@ This tool concatenates numerous files within a directory into a single prompt, o
 
 You can refer here for the original repository: https://github.com/simonw/files-to-prompt
 
-Usage: `gpt-review-code [OPTIONS]`
+Usage: `files-to-prompt [OPTIONS]`
 
 Options are as follows:
   - `-d, --dir-path <DIR_PATH>` : Directory path to concatenate the files from. Default value is '.'.
@@ -17,11 +17,11 @@ Options are as follows:
 
 Example Usage:
 
-`./target/release/gpt-review-code -d $(pwd) -e "rs,json" -l 50`
-`./target/release/gpt-review-code -d $(pwd) -e "rs,json" -l 50 | llm -s "Explain this sources code and show results in the table" -m gemini-1.5-pro-latest`
+`./target/release/files-to-prompt -d $(pwd) -e "rs,json" -l 50`
+`./target/release/files-to-prompt -d $(pwd) -e "rs,json" -l 50 | llm -s "Explain this sources code and show results in the table" -m gemini-1.5-pro-latest`
 
 
-`./target/release/gpt-review-code -d mistral.rs/ -e "rs,json" -l 50` 
+`./target/release/files-to-prompt -d mistral.rs/ -e "rs,json" -l 50` 
 ![alt text](image.png)
 
 Build:
