@@ -22,9 +22,9 @@ struct Args {
     clean_input_enabled: Option<bool>,
     #[arg(short, long, default_value = None)]
     files: Option<Vec<String>>,
-    #[arg(long, default_value = None)]
+    #[arg(long, default_value = None, help = "Ignore files: <file1>,<file2>,..., we will ignore .gitignore, .git by default.")]
     ignore_files: Option<String>,
-    #[arg(long, default_value = None)]
+    #[arg(long, default_value = None, help = "Ignore folders: <folder1>,<folder2>,..., we will ignore .git, .idea, node_modules by default.")]
     ignore_folders: Option<String>,
 }
 
