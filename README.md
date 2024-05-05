@@ -15,6 +15,7 @@ Options are as follows:
 - `-o, --output-file <OUTPUT_FILE>` : Specify the output file name.
 - `-m, --mode <MODE>` : State the mode, default is 'stdout'.
 - `-l, --lines <LINES>` : Limit the number of lines from the file to add. Default value is -1 which means get all lines from the file.
+- `-f, --files <Files>` : Support multiple files to concatenate. Default value is empty. Example: -f file1 -f file2
 - `-h, --help` : Display the help instructions.
 - `-V, --version` : Print the version of the program.
 
