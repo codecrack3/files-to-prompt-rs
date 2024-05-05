@@ -1,3 +1,4 @@
+use clap::arg;
 use clap::{Parser, Subcommand};
 use rayon::prelude::*;
 use regex::Regex;
@@ -19,7 +20,10 @@ struct Args {
     lines: Option<i32>,
     #[arg(short = 'c', long, default_value = "true")]
     clean_input_enabled: Option<bool>,
+    #[arg(short, long, default_value = None)]
+    files: Option<Vec<String>>,
 }
+
 #[derive(Debug)]
 struct Config {
     dir_path: String,
@@ -27,6 +31,7 @@ struct Config {
     output_file: String,
     lines: Option<i32>,
     clean_input_enabled: Option<bool>,
+    files: Option<Vec<String>>,
 }
 
 fn main() -> Result<(), std::io::Error> {
@@ -44,6 +49,7 @@ fn main() -> Result<(), std::io::Error> {
         output_file: args.output_file,
         lines: args.lines,
         clean_input_enabled: args.clean_input_enabled,
+        files: args.files,
     };
 
     process_files(&config)?;
@@ -102,6 +108,14 @@ fn process_files(config: &Config) -> Result<(), std::io::Error> {
 
     if !config.output_file.is_empty() {
         output = Box::new(io::BufWriter::new(fs::File::create(&config.output_file)?));
+    }
+
+    if config.files.is_some() {
+        for file in config.files.as_ref().unwrap() {
+            let path = Path::new(file);
+            write_output(&mut output, &path.to_path_buf(), &config)?;
+        }
+        return Ok(());
     }
 
     // traversal the directory and get all files using threading
