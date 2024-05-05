@@ -34,6 +34,9 @@ struct Config {
     files: Option<Vec<String>>,
 }
 
+const IGNORED_FOLDER: [&str; 3] = [".git", ".idea", "node_modules"];
+const IGNORED_FILE: [&str; 3] = ["package-lock.json", "yarn.lock", "Cargo.lock"];
+
 fn main() -> Result<(), std::io::Error> {
     let args = Args::parse();
     let patterns: Vec<String> = args
@@ -83,11 +86,18 @@ fn traverse(dir: PathBuf, files_extension: Vec<String>) -> Vec<PathBuf> {
                 for entry in entries {
                     let entry = entry.unwrap();
                     let path = entry.path();
-                    if path.is_dir() {
+                    if path.is_dir()
+                        && !IGNORED_FOLDER.contains(&path.file_name().unwrap().to_str().unwrap())
+                    {
                         d.push(path);
                     } else {
                         if let Some(extension) = path.extension() {
-                            if files_extension.contains(&extension.to_str().unwrap().to_string()) {
+                            if files_extension.contains(&extension.to_str().unwrap().to_string())
+                                && !IGNORED_FILE
+                                    .contains(&path.file_name().unwrap().to_str().unwrap())
+                            {
+                                // println!("Found file: {:?}", path);
+                                // println!("Extension: {:?}", extension.to_str().unwrap());
                                 f.push(path);
                             }
                         }
@@ -110,7 +120,7 @@ fn process_files(config: &Config) -> Result<(), std::io::Error> {
         output = Box::new(io::BufWriter::new(fs::File::create(&config.output_file)?));
     }
 
-    if config.files.is_some() {
+    if config.files != None && config.files.is_some() {
         for file in config.files.as_ref().unwrap() {
             let path = Path::new(file);
             write_output(&mut output, &path.to_path_buf(), &config)?;

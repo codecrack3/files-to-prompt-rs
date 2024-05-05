@@ -1,5 +1,3 @@
-use argh::FromArgs;
-
 # Files-to-Prompt-rs
 
 This tool concatenates numerous files within a directory into a single prompt, optimised for usage with LLMs. Notably, it is developed in Rust and exhibits high performance behaviour
@@ -19,7 +17,7 @@ Options are as follows:
 - `-h, --help` : Display the help instructions.
 - `-V, --version` : Print the version of the program.
 
-Example Usage:
+# Example Usage:
 
 `./target/release/files-to-prompt -d $(pwd) -e "rs,json" -l 50`
 
@@ -28,9 +26,11 @@ Example Usage:
 `./target/release/files-to-prompt -d mistral.rs/ -e "rs,json" -l 50`
 ![alt text](images/image.png)
 
-Support multiple files:
+# Support multiple files:
+
 `./target/release/files-to-prompt -f Cargo.toml -f README.md`
 ![alt text](images/image-1.png)
 
-Build:
+# Build:
+
 cargo build --release
