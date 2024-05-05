@@ -152,7 +152,7 @@ fn traverse(dir: PathBuf, files_extension: Vec<String>, config: &Config) -> Vec<
 }
 
 fn process_files(config: &Config) -> Result<(), std::io::Error> {
-    println!("{:?}", config);
+    // println!("{:?}", config);
 
     // ignore the output file if mode is stdout
     let mut output: Box<dyn Write> = Box::new(io::stdout());
