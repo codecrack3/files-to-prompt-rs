@@ -14,6 +14,8 @@ Options are as follows:
 - `-m, --mode <MODE>` : State the mode, default is 'stdout'.
 - `-l, --lines <LINES>` : Limit the number of lines from the file to add. Default value is -1 which means get all lines from the file.
 - `-f, --files <Files>` : Support multiple files to concatenate. Default value is empty. Example: -f file1 -f file2
+- `--ignore-files <IGNORE_FILES>`: Ignore files: <file1>,<file2>,..., we will ignore .gitignore, .git by default.
+- `--ignore-dirs <IGNORE_DIRS>`: Ignore directories: <dir1>,<dir2>,..., we will ignore .git, node_module by default.
 - `-h, --help` : Display the help instructions.
 - `-V, --version` : Print the version of the program.
 
