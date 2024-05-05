@@ -22,6 +22,10 @@ struct Args {
     clean_input_enabled: Option<bool>,
     #[arg(short, long, default_value = None)]
     files: Option<Vec<String>>,
+    #[arg(long, default_value = None)]
+    ignore_files: Option<String>,
+    #[arg(long, default_value = None)]
+    ignore_folders: Option<String>,
 }
 
 #[derive(Debug)]
@@ -32,10 +36,12 @@ struct Config {
     lines: Option<i32>,
     clean_input_enabled: Option<bool>,
     files: Option<Vec<String>>,
+    ignored_files: Vec<String>,
+    ignored_folders: Vec<String>,
 }
 
-const IGNORED_FOLDER: [&str; 3] = [".git", ".idea", "node_modules"];
-const IGNORED_FILE: [&str; 3] = ["package-lock.json", "yarn.lock", "Cargo.lock"];
+const IGNORED_FILES: [&str; 2] = ["gitignore", "git"];
+const IGNORED_FOLDERS: [&str; 3] = [".git", ".idea", "node_modules"];
 
 fn main() -> Result<(), std::io::Error> {
     let args = Args::parse();
@@ -46,6 +52,35 @@ fn main() -> Result<(), std::io::Error> {
         .flatten()
         .map(|x| x.trim().to_string())
         .collect();
+
+    // merge the ignore files and ignore folders with const ignored files and folders
+
+    let mut ignored_files_list: Vec<String> = IGNORED_FILES.iter().map(|x| x.to_string()).collect();
+    let mut ignored_folders_list: Vec<String> =
+        IGNORED_FOLDERS.iter().map(|x| x.to_string()).collect();
+
+    if args.ignore_files != None && args.ignore_files.is_some() {
+        ignored_files_list.extend(
+            args.ignore_files
+                .as_ref()
+                .unwrap()
+                .split(',')
+                .map(|x| x.trim().to_string())
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    if args.ignore_folders != None && args.ignore_folders.is_some() {
+        ignored_folders_list.extend(
+            args.ignore_folders
+                .as_ref()
+                .unwrap()
+                .split(',')
+                .map(|x| x.trim().to_string())
+                .collect::<Vec<_>>(),
+        );
+    }
+
     let config = Config {
         dir_path: args.dir_path,
         file_patterns: patterns,
@@ -53,6 +88,8 @@ fn main() -> Result<(), std::io::Error> {
         lines: args.lines,
         clean_input_enabled: args.clean_input_enabled,
         files: args.files,
+        ignored_files: ignored_files_list,
+        ignored_folders: ignored_folders_list,
     };
 
     process_files(&config)?;
@@ -72,7 +109,7 @@ fn split_content(content: &str, lines: i32) -> String {
     }
     result
 }
-fn traverse(dir: PathBuf, files_extension: Vec<String>) -> Vec<PathBuf> {
+fn traverse(dir: PathBuf, files_extension: Vec<String>, config: &Config) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let mut dirs = vec![dir];
 
@@ -86,18 +123,20 @@ fn traverse(dir: PathBuf, files_extension: Vec<String>) -> Vec<PathBuf> {
                 for entry in entries {
                     let entry = entry.unwrap();
                     let path = entry.path();
+
                     if path.is_dir()
-                        && !IGNORED_FOLDER.contains(&path.file_name().unwrap().to_str().unwrap())
+                        && !config
+                            .ignored_folders
+                            .contains(&path.file_name().unwrap().to_str().unwrap().to_string())
                     {
                         d.push(path);
                     } else {
                         if let Some(extension) = path.extension() {
                             if files_extension.contains(&extension.to_str().unwrap().to_string())
-                                && !IGNORED_FILE
-                                    .contains(&path.file_name().unwrap().to_str().unwrap())
+                                && !config
+                                    .ignored_files
+                                    .contains(&extension.to_str().unwrap().to_string())
                             {
-                                // println!("Found file: {:?}", path);
-                                // println!("Extension: {:?}", extension.to_str().unwrap());
                                 f.push(path);
                             }
                         }
@@ -113,6 +152,8 @@ fn traverse(dir: PathBuf, files_extension: Vec<String>) -> Vec<PathBuf> {
 }
 
 fn process_files(config: &Config) -> Result<(), std::io::Error> {
+    println!("{:?}", config);
+
     // ignore the output file if mode is stdout
     let mut output: Box<dyn Write> = Box::new(io::stdout());
 
@@ -132,6 +173,7 @@ fn process_files(config: &Config) -> Result<(), std::io::Error> {
     let files = traverse(
         Path::new(&config.dir_path).to_path_buf(),
         config.file_patterns.clone(),
+        config,
     );
     for file in files {
         let file_name = file.file_name().unwrap().to_str().unwrap();
