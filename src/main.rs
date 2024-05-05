@@ -1,11 +1,10 @@
+use clap::{Parser, Subcommand};
+use rayon::prelude::*;
+use regex::Regex;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
-use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use rayon::prelude::*;
-
-
 
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
@@ -16,34 +15,38 @@ struct Args {
     file_patterns: Vec<String>,
     #[arg(short, long, default_value = "")]
     output_file: String,
-    #[arg(short, long, default_value = "stdout")]
-    mode: String,
     #[arg(short, long, default_value = "-1")]
-    lines: Option<i32>
+    lines: Option<i32>,
+    #[arg(short = 'c', long, default_value = "true")]
+    clean_input_enabled: Option<bool>,
 }
 #[derive(Debug)]
 struct Config {
     dir_path: String,
     file_patterns: Vec<String>,
     output_file: String,
-    mode: String,
-    lines: Option<i32>
+    lines: Option<i32>,
+    clean_input_enabled: Option<bool>,
 }
 
-fn main () -> Result<(), std::io::Error> {
+fn main() -> Result<(), std::io::Error> {
     let args = Args::parse();
-    let patterns: Vec<String> = args.file_patterns.iter().map(|x| x.split(',').collect::<Vec<_>>()).flatten().map(|x| x.trim().to_string()).collect();
+    let patterns: Vec<String> = args
+        .file_patterns
+        .iter()
+        .map(|x| x.split(',').collect::<Vec<_>>())
+        .flatten()
+        .map(|x| x.trim().to_string())
+        .collect();
     let config = Config {
         dir_path: args.dir_path,
         file_patterns: patterns,
         output_file: args.output_file,
-        mode: args.mode,
-        lines: args.lines
+        lines: args.lines,
+        clean_input_enabled: args.clean_input_enabled,
     };
-    
-    
-    process_files(&config)?;
 
+    process_files(&config)?;
     Ok(())
 }
 
@@ -65,25 +68,28 @@ fn traverse(dir: PathBuf, files_extension: Vec<String>) -> Vec<PathBuf> {
     let mut dirs = vec![dir];
 
     while !dirs.is_empty() {
-        let (new_dirs, new_files): (Vec<_>, Vec<_>) = dirs.par_iter().map(|dir| {
-            let mut f = Vec::new();
-            let mut d = Vec::new();
-            let entries = fs::read_dir(dir).unwrap();
-            for entry in entries {
-                let entry = entry.unwrap();
-                let path = entry.path();
-                if path.is_dir() {
-                    d.push(path);
-                } else {
-                    if let Some(extension) = path.extension() {
-                        if files_extension.contains(&extension.to_str().unwrap().to_string()) {
-                            f.push(path);
+        let (new_dirs, new_files): (Vec<_>, Vec<_>) = dirs
+            .par_iter()
+            .map(|dir| {
+                let mut f = Vec::new();
+                let mut d = Vec::new();
+                let entries = fs::read_dir(dir).unwrap();
+                for entry in entries {
+                    let entry = entry.unwrap();
+                    let path = entry.path();
+                    if path.is_dir() {
+                        d.push(path);
+                    } else {
+                        if let Some(extension) = path.extension() {
+                            if files_extension.contains(&extension.to_str().unwrap().to_string()) {
+                                f.push(path);
+                            }
                         }
                     }
                 }
-            }
-            (d, f)
-        }).unzip();
+                (d, f)
+            })
+            .unzip();
         files.extend(new_files.into_iter().flatten());
         dirs = new_dirs.into_iter().flatten().collect();
     }
@@ -99,36 +105,42 @@ fn process_files(config: &Config) -> Result<(), std::io::Error> {
     }
 
     // traversal the directory and get all files using threading
-    let files = traverse(Path::new(&config.dir_path).to_path_buf(), config.file_patterns.clone());
+    let files = traverse(
+        Path::new(&config.dir_path).to_path_buf(),
+        config.file_patterns.clone(),
+    );
     for file in files {
         let file_name = file.file_name().unwrap().to_str().unwrap();
         let file_name_ext = file_name.split('.').last().unwrap();
-        
+
         if config.file_patterns.contains(&file_name_ext.to_string()) {
-            if config.mode == "stdout" {
-                println!("{}/{}", file.parent().unwrap().display(), file_name);
-                println!("==========");
-                let content = fs::read(&file)?;
-                let mut content_str = String::from_utf8_lossy(&content);
-                if config.lines.unwrap() != -1{
-                    content_str = split_content(&content_str, config.lines.unwrap()).into();
-                }
-                println!("{}", content_str);
-                println!("---");
-            } else
-            {
-                writeln!(output, "{}/{}", file.parent().unwrap().display(), file_name)?;
-                writeln!(output, "==========")?;
-                let content = fs::read(&file)?;
-                let mut content_str = String::from_utf8_lossy(&content);
-                if config.lines.unwrap() != -1{
-                    content_str = split_content(&content_str, config.lines.unwrap()).into();
-                }
-                writeln!(output, "{}", content_str)?;
-                writeln!(output, "---")?;
-            }
+            write_output(&mut output, &file, &config)?;
         }
     }
 
+    Ok(())
+}
+
+fn write_output(
+    output: &mut dyn Write,
+    file: &PathBuf,
+    config: &Config,
+) -> Result<(), std::io::Error> {
+    let file_name = file.file_name().unwrap().to_str().unwrap();
+    writeln!(output, "{}/{}", file.parent().unwrap().display(), file_name)?;
+    writeln!(output, "==========")?;
+    let content = fs::read(&file)?;
+    let mut content_str = String::from_utf8_lossy(&content);
+    if config.lines.unwrap() != -1 {
+        content_str = split_content(&content_str, config.lines.unwrap()).into();
+    }
+    if config.clean_input_enabled.unwrap() {
+        let pattern = Regex::new(r"[\r\n\t\s]+").unwrap();
+        let replaced_content_str = pattern.replace_all(&content_str, " ");
+        writeln!(output, "{}", replaced_content_str)?;
+    } else {
+        writeln!(output, "{}", content_str)?;
+    }
+    writeln!(output, "---")?;
     Ok(())
 }
