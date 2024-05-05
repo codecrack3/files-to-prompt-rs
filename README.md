@@ -26,7 +26,7 @@ Example Usage:
 `./target/release/files-to-prompt -d $(pwd) -e "rs,json" -l 50 | llm -s "Explain this sources code and show results in the table" -m gemini-1.5-pro-latest`
 
 `./target/release/files-to-prompt -d mistral.rs/ -e "rs,json" -l 50`
-![alt text](images/image.png)
+![alt text](image.png)
 
 Support multiple files:
 `./target/release/files-to-prompt -f Cargo.toml -f README.md`
