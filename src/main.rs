@@ -63,14 +63,18 @@ fn list_all_templates() -> Result<(), std::io::Error> {
     }
 
     // templates folder
-    print!("[+] Templates in custom templates folder: ");
-
     let path = Path::new("templates");
-    for entry in fs::read_dir(path)? {
-        let entry = entry?;
-        let path = entry.path();
-        let file_name = path.file_name().unwrap().to_str().unwrap();
-        println!("{}", file_name);
+    if path.exists() {
+        println!("\n[+] Templates in custom templates folder:");
+
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let path = entry.path();
+            let file_name = path.file_name().unwrap().to_str().unwrap();
+            // without the extension
+            let file_name = file_name.split('.').next().unwrap();
+            println!("{}", file_name);
+        }
     }
 
     Ok(())
