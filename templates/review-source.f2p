@@ -1,0 +1,37 @@
+I need your help review this codebase. Here are the files involved:
+
+{{code}}
+
+Some areas to focus on during the review:
+    - Security
+        - Are there any security vulnerabilities in the code?
+        - Are there any security best practices that are not being followed?
+        - Are there any sensitive data being exposed?
+    - Performance
+        - Are there any performance issues in the code?
+        - Are there any performance best practices that are not being followed?
+        - Are there any potential bottlenecks in the code?
+    - Design
+        - Is the code well-designed?
+        - Are there any design patterns that could be used to improve the code?
+        - Are there any anti-patterns that are being used in the code?
+    - Maintainability
+        - Is the code easy to maintain?
+        - Are there any code smells that could be refactored?
+        - Are there any areas of the code that are hard to understand?
+    - Best practices
+        - Are there any best practices that are not being followed?
+        - Are there any areas of the code that could be improved?
+
+Follow output the following format for your review:
+    Path: [path to file]
+    - Security: 
+        - [your comments]
+    - Performance: 
+        - [your comments]
+    - Design: 
+        - [your comments]
+    - Maintainability: 
+        - [your comments]
+    - Best practices: 
+        - [your comments]
