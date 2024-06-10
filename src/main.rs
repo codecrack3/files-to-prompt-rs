@@ -98,7 +98,9 @@ fn find_template_file(name_template: &str) -> Result<String, std::io::Error> {
     }
 
     if !found {
-        let path = Path::new("templates").join(name_template);
+        let path = Path::new("templates")
+            .join(name_template)
+            .with_extension("f2p");
         let mut file = File::open(path)?;
         file.read_to_string(&mut template_content)?;
     }
@@ -180,7 +182,6 @@ fn split_content(content: &str, lines: i32) -> String {
 
 fn render_template(template_name: &str, content: &str) -> Result<String, tera::Error> {
     // Find the template file
-
     let template_content = find_template_file(template_name)?;
 
     // print!("{}", template_content);
