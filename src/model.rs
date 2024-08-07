@@ -9,4 +9,5 @@ pub struct Config {
     pub ignored_files: Vec<String>,
     pub ignored_folders: Vec<String>,
     pub template: String,
+    pub path_template: Option<String>,
 }

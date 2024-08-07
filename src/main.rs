@@ -47,6 +47,9 @@ struct Args {
 
     #[arg(long, help = "List all available templates.")]
     list_templates: bool,
+
+    #[arg(short = 't', long, default_value = None, help = "Path to the template file.")]
+    path_template: Option<String>,
 }
 
 const IGNORED_FILES: [&str; 2] = ["gitignore", "git"];
@@ -84,6 +87,14 @@ fn find_template_file(name_template: &str) -> Result<String, std::io::Error> {
     // find name in templates in Assets or in the templates folder
     let mut template_content = String::new();
     let mut found = false;
+
+    // if template is path to the file
+
+    if Path::new(name_template).exists() {
+        let mut file = File::open(name_template)?;
+        file.read_to_string(&mut template_content)?;
+        return Ok(template_content);
+    }
 
     for file in Assets::iter() {
         let file_name = file.as_ref().split('.').next().unwrap();
@@ -146,6 +157,7 @@ fn main() -> Result<(), std::io::Error> {
         );
     }
 
+
     if args.list_templates {
         return list_all_templates();
     }
@@ -160,6 +172,7 @@ fn main() -> Result<(), std::io::Error> {
         ignored_files: ignored_files_list,
         ignored_folders: ignored_folders_list,
         template: args.template,
+        path_template: args.path_template,
     };
 
     process_files(&config)?;
@@ -247,7 +260,15 @@ fn process_files(config: &Config) -> Result<(), std::io::Error> {
 
     let raw_text_output = collect_output(files, &config)?;
 
-    let rendered = render_template(&config.template, raw_text_output.as_str());
+    let rendered: Result<String, tera::Error>;
+    // check if using specific path template
+    if !config.path_template.is_none() {
+        rendered = render_template(&config.path_template.as_ref().unwrap(), raw_text_output.as_str());
+    }
+    else {
+        rendered = render_template(&config.template, raw_text_output.as_str());
+    }
+
     let rendered_clone = rendered.unwrap().clone(); // Clone the value of rendered
 
     io::stdout().write_all(rendered_clone.as_bytes())?; // Print the cloned value of rendered

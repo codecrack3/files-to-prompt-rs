@@ -1,0 +1,21 @@
+Suggest a base code structure for a project that prioritizes scalability and maintainability. The project is expected to grow in complexity and features over time. Consider aspects like modularity, separation of concerns, testability, and common best practices. Provide a directory structure outline with a brief explanation of each component's purpose.
+
+### Desired Response:
+
+I would expect a response that outlines a well-organized directory structure for a Python project. This structure should include common components like:
+
+* **A dedicated `app` or `core` directory:** Containing the main application logic, models, and business rules.
+* **A separate `tests` directory:** For unit and integration tests.
+* **A `utils` or `helpers` directory:** For reusable utility functions and classes.
+* **A `config` or `settings` directory:** For managing configuration and environment variables.
+* **Potentially a `scripts` directory:** For command-line scripts and automation tasks.
+
+The response should also briefly explain the purpose of each component and how it contributes to scalability and maintainability.
+
+Additionally, I would appreciate if the response includes considerations for:
+
+* **Modularity:**  How the structure facilitates breaking down the project into smaller, manageable modules.
+* **Separation of concerns:**  How different functionalities are isolated to prevent tight coupling.
+* **Testability:**  How the structure makes it easier to write and maintain tests.
+
+{{code}}
