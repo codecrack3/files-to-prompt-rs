@@ -48,10 +48,24 @@ struct Args {
 
     #[arg(short = 't', long, help = "Path to the template file.")]
     path_template: Option<String>,
+
+    #[arg(long, help = "Skip binary files instead of showing an error.")]
+    skip_binary: bool,
 }
 
 const IGNORED_FILES: &[&str] = &["gitignore", "git"];
 const IGNORED_FOLDERS: &[&str] = &[".git", ".idea", "node_modules"];
+
+// Common binary file extensions
+const BINARY_EXTENSIONS: &[&str] = &[
+    "exe", "dll", "so", "dylib", "bin", "obj", "o", "a", "lib",
+    "jpg", "jpeg", "png", "gif", "bmp", "ico", "svg", "webp",
+    "mp3", "mp4", "avi", "mov", "wav", "flac", "ogg",
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+    "zip", "tar", "gz", "bz2", "7z", "rar",
+    "class", "jar", "war", "ear",
+    "pyc", "pyo", "pyd",
+];
 
 #[derive(Debug)]
 struct AppError(String);
@@ -95,6 +109,57 @@ impl From<String> for AppError {
 }
 
 type Result<T> = std::result::Result<T, AppError>;
+
+/// Safely reads file content, handling binary files gracefully
+fn safe_read_file_content(file_path: &Path, skip_binary: bool) -> Result<String> {
+    // Check if file extension suggests it's binary
+    if let Some(extension) = file_path.extension().and_then(|ext| ext.to_str()) {
+        if BINARY_EXTENSIONS.contains(&extension.to_lowercase().as_str()) {
+            if skip_binary {
+                return Ok(format!("[Binary file skipped: {}]", extension.to_uppercase()));
+            } else {
+                return Ok(format!("[Binary file detected: {} - content not displayed]", extension.to_uppercase()));
+            }
+        }
+    }
+
+    // Try to read as bytes first to check for binary content
+    let bytes = fs::read(file_path)?;
+    
+    // Check if the content is likely binary by looking for null bytes or high ratio of non-printable characters
+    let null_count = bytes.iter().filter(|&&b| b == 0).count();
+    let non_printable_count = bytes.iter()
+        .filter(|&&b| b < 32 && b != 9 && b != 10 && b != 13) // Allow tab, newline, carriage return
+        .count();
+    
+    // If more than 1% null bytes or more than 30% non-printable, treat as binary
+    let is_likely_binary = null_count > bytes.len() / 100 || 
+                          non_printable_count > bytes.len() * 3 / 10;
+    
+    if is_likely_binary {
+        if skip_binary {
+            return Ok("[Binary content detected - file skipped]".to_string());
+        } else {
+            return Ok("[Binary content detected - content not displayed]".to_string());
+        }
+    }
+
+    // Try to convert to UTF-8 string
+    match String::from_utf8(bytes) {
+        Ok(content) => Ok(content),
+        Err(_) => {
+            // If UTF-8 conversion fails, try with lossy conversion
+            let bytes = fs::read(file_path)?;
+            let content = String::from_utf8_lossy(&bytes);
+            
+            if skip_binary {
+                Ok("[File contains invalid UTF-8 - file skipped]".to_string())
+            } else {
+                Ok(format!("[File contains invalid UTF-8 - showing lossy conversion]\n{}", content))
+            }
+        }
+    }
+}
 
 fn list_all_templates() -> Result<()> {
     println!("Available templates:");
@@ -190,6 +255,7 @@ fn main() -> Result<()> {
         ignored_folders,
         template: args.template,
         path_template: args.path_template,
+        skip_binary: Some(args.skip_binary),
     };
 
     process_files(&config)
@@ -255,6 +321,8 @@ fn collect_output(files: Vec<PathBuf>, config: &Config) -> Result<String> {
         None
     };
 
+    let skip_binary = config.skip_binary.unwrap_or(false);
+
     let results: Result<Vec<String>> = files
         .par_iter()
         .map(|file| -> Result<String> {
@@ -271,7 +339,8 @@ fn collect_output(files: Vec<PathBuf>, config: &Config) -> Result<String> {
             result.push_str(&format!("\n{}/{}\n", parent_path, file_name));
             result.push_str(&format!("{:-<1$}\n", "", 3));
 
-            let content = fs::read_to_string(file)?;
+            // Use safe file reading instead of fs::read_to_string
+            let content = safe_read_file_content(file, skip_binary)?;
             
             let processed_content = if let Some(max_lines) = config.lines {
                 split_content(&content, max_lines)

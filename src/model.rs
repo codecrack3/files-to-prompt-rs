@@ -10,6 +10,7 @@ pub struct Config {
     pub ignored_folders: Vec<String>,
     pub template: String,
     pub path_template: Option<String>,
+    pub skip_binary: Option<bool>,
 }
 
 impl Default for Config {
@@ -29,6 +30,7 @@ impl Default for Config {
             ignored_folders: vec![".git".to_string(), ".idea".to_string(), "node_modules".to_string()],
             template: "default".to_string(),
             path_template: None,
+            skip_binary: Some(false),
         }
     }
 }
