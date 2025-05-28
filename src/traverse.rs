@@ -1,46 +1,49 @@
 use crate::model::Config;
 use rayon::prelude::*;
+use std::collections::VecDeque;
+use std::ffi::OsStr;
 use std::fs;
 use std::path::PathBuf;
 
-pub fn traverse(dir: PathBuf, files_extension: Vec<String>, config: Config) -> Vec<PathBuf> {
+pub fn traverse(dir: PathBuf, file_extensions: Vec<String>, config: Config) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    let mut dirs = vec![dir];
+    let mut dirs = VecDeque::new();
+    dirs.push_back(dir);
 
-    while !dirs.is_empty() {
-        let (new_dirs, new_files): (Vec<_>, Vec<_>) = dirs
-            .par_iter()
-            .map(|dir| {
-                let mut f = Vec::new();
-                let mut d = Vec::new();
-                let entries = fs::read_dir(dir).unwrap();
-                for entry in entries {
-                    let entry = entry.unwrap();
+    while let Some(current_dir) = dirs.pop_front() {
+        if let Ok(entries) = fs::read_dir(&current_dir) {
+            let (new_dirs, new_files): (Vec<_>, Vec<_>) = entries
+                .filter_map(|entry| entry.ok())
+                .collect::<Vec<_>>()
+                .par_iter()
+                .filter_map(|entry| {
                     let path = entry.path();
-
-                    if path.is_dir()
-                        && !config
-                            .ignored_folders
-                            .contains(&path.file_name().unwrap().to_str().unwrap().to_string())
-                    {
-                        d.push(path);
-                    } else {
-                        if let Some(extension) = path.extension() {
-                            if files_extension.contains(&extension.to_str().unwrap().to_string())
-                                && !config
-                                    .ignored_files
-                                    .contains(&extension.to_str().unwrap().to_string())
-                            {
-                                f.push(path);
+                    
+                    if path.is_dir() {
+                        if let Some(dir_name) = path.file_name().and_then(OsStr::to_str) {
+                            if !config.ignored_folders.contains(&dir_name.to_string()) {
+                                return Some((Some(path), None));
+                            }
+                        }
+                    } else if path.is_file() {
+                        if let Some(extension) = path.extension().and_then(OsStr::to_str) {
+                            if file_extensions.contains(&extension.to_string()) 
+                                && !config.ignored_files.contains(&extension.to_string()) {
+                                return Some((None, Some(path)));
                             }
                         }
                     }
-                }
-                (d, f)
-            })
-            .unzip();
-        files.extend(new_files.into_iter().flatten());
-        dirs = new_dirs.into_iter().flatten().collect();
+                    None
+                })
+                .unzip();
+
+            // Add new directories to the queue
+            dirs.extend(new_dirs.into_iter().flatten());
+            
+            // Add new files to the result
+            files.extend(new_files.into_iter().flatten());
+        }
     }
+
     files
 }

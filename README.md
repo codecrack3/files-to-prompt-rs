@@ -4,6 +4,8 @@ Provice a list of files to prompt and explain the content of the files.
 
 ## Brief description
 
+![alt text](images/mermaid-diagram-2025-05-28-091525.png)
+
 Directory File Processor is a Rust-based command-line tool that recursively traverses directories, filters files based on specified extensions and criteria, processes their content, and renders the result using customizable templates.
 
 ## Features

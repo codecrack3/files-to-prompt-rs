@@ -3,10 +3,8 @@ use clap::Parser;
 use rayon::prelude::*;
 use regex::Regex;
 use std::fs;
-use std::fs::File;
-use std::io::{self, Read, Write};
-use std::path::Path;
-use std::path::PathBuf;
+use std::io::{self, BufWriter, Write};
+use std::path::{Path, PathBuf};
 use tera::{Context, Tera};
 
 use files_to_prompt::model::Config;
@@ -24,18 +22,18 @@ struct Args {
     #[arg(short, long, default_value = ".")]
     dir_path: String,
     #[arg(short = 'e', long, default_value = "txt,py,c,go,rs,java,js,html,ts")]
-    file_patterns: Vec<String>,
+    file_patterns: String,
     #[arg(short, long, default_value = "")]
     output_file: String,
-    #[arg(short, long, default_value = "-1")]
+    #[arg(short, long)]
     lines: Option<i32>,
-    #[arg(short = 'c', long, default_value = "true")]
-    clean_input_enabled: Option<bool>,
-    #[arg(short, long, default_value = None)]
+    #[arg(short = 'c', long)]
+    clean_input_enabled: bool,
+    #[arg(short, long, value_delimiter = ',')]
     files: Option<Vec<String>>,
-    #[arg(long, default_value = None, help = "Ignore files: <file1>,<file2>,..., we will ignore .gitignore, .git by default.")]
+    #[arg(long, help = "Ignore files: <file1>,<file2>,..., we will ignore .gitignore, .git by default.")]
     ignore_files: Option<String>,
-    #[arg(long, default_value = None, help = "Ignore folders: <folder1>,<folder2>,..., we will ignore .git, .idea, node_modules by default.")]
+    #[arg(long, help = "Ignore folders: <folder1>,<folder2>,..., we will ignore .git, .idea, node_modules by default.")]
     ignore_folders: Option<String>,
 
     #[arg(
@@ -48,296 +46,251 @@ struct Args {
     #[arg(long, help = "List all available templates.")]
     list_templates: bool,
 
-    #[arg(short = 't', long, default_value = None, help = "Path to the template file.")]
+    #[arg(short = 't', long, help = "Path to the template file.")]
     path_template: Option<String>,
 }
 
-const IGNORED_FILES: [&str; 2] = ["gitignore", "git"];
-const IGNORED_FOLDERS: [&str; 3] = [".git", ".idea", "node_modules"];
+const IGNORED_FILES: &[&str] = &["gitignore", "git"];
+const IGNORED_FOLDERS: &[&str] = &[".git", ".idea", "node_modules"];
 
-fn list_all_templates() -> Result<(), std::io::Error> {
-    // combine templates folder with the templates from the rust_embed
-    // custom folder templates
-    // only show name of the files in templates folder and remove the extension
+#[derive(Debug)]
+struct AppError(String);
+
+impl std::fmt::Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for AppError {}
+
+impl From<std::io::Error> for AppError {
+    fn from(err: std::io::Error) -> Self {
+        AppError(err.to_string())
+    }
+}
+
+impl From<tera::Error> for AppError {
+    fn from(err: tera::Error) -> Self {
+        AppError(err.to_string())
+    }
+}
+
+impl From<std::str::Utf8Error> for AppError {
+    fn from(err: std::str::Utf8Error) -> Self {
+        AppError(err.to_string())
+    }
+}
+
+impl From<regex::Error> for AppError {
+    fn from(err: regex::Error) -> Self {
+        AppError(err.to_string())
+    }
+}
+
+impl From<String> for AppError {
+    fn from(err: String) -> Self {
+        AppError(err)
+    }
+}
+
+type Result<T> = std::result::Result<T, AppError>;
+
+fn list_all_templates() -> Result<()> {
+    println!("Available templates:");
+    
+    // Embedded templates
     for file in Assets::iter() {
-        // without the extension
-        let file_name = file.as_ref().split('.').next().unwrap();
-        println!("{}", file_name);
+        if let Some(file_name) = file.as_ref().split('.').next() {
+            println!("  {}", file_name);
+        }
     }
 
-    // templates folder
-    let path = Path::new("templates");
-    if path.exists() {
-        println!("\n[+] Templates in custom templates folder:");
-
-        for entry in fs::read_dir(path)? {
+    // Custom templates folder
+    let templates_path = Path::new("templates");
+    if templates_path.exists() {
+        println!("\nCustom templates:");
+        for entry in fs::read_dir(templates_path)? {
             let entry = entry?;
             let path = entry.path();
-            let file_name = path.file_name().unwrap().to_str().unwrap();
-            // without the extension
-            let file_name = file_name.split('.').next().unwrap();
-            println!("{}", file_name);
+            if let Some(file_name) = path.file_stem().and_then(|s| s.to_str()) {
+                println!("  {}", file_name);
+            }
         }
     }
 
     Ok(())
 }
 
-fn find_template_file(name_template: &str) -> Result<String, std::io::Error> {
-    // find name in templates in Assets or in the templates folder
-    let mut template_content = String::new();
-    let mut found = false;
-
-    // if template is path to the file
-
+fn find_template_file(name_template: &str) -> Result<String> {
+    // Check if it's a direct file path
     if Path::new(name_template).exists() {
-        let mut file = File::open(name_template)?;
-        file.read_to_string(&mut template_content)?;
-        return Ok(template_content);
+        return Ok(fs::read_to_string(name_template)?);
     }
 
+    // Check embedded templates
     for file in Assets::iter() {
-        let file_name = file.as_ref().split('.').next().unwrap();
-        if file_name == name_template {
-            let mut file = Assets::get(file.as_ref()).unwrap();
-
-            template_content = std::str::from_utf8(file.data.as_ref()).unwrap().to_string();
-
-            found = true;
-            break;
+        if let Some(file_name) = file.as_ref().split('.').next() {
+            if file_name == name_template {
+                let file_data = Assets::get(file.as_ref())
+                    .ok_or_else(|| AppError("Failed to get embedded template".to_string()))?;
+                return Ok(std::str::from_utf8(&file_data.data)?.to_string());
+            }
         }
     }
 
-    if !found {
-        let path = Path::new("templates")
-            .join(name_template)
-            .with_extension("f2p");
-        let mut file = File::open(path)?;
-        file.read_to_string(&mut template_content)?;
+    // Check custom templates folder
+    let template_path = Path::new("templates")
+        .join(name_template)
+        .with_extension("f2p");
+    
+    if template_path.exists() {
+        return Ok(fs::read_to_string(template_path)?);
     }
 
-    Ok(template_content)
+    Err(AppError(format!("Template '{}' not found", name_template)))
 }
 
-fn main() -> Result<(), std::io::Error> {
+fn parse_comma_separated(input: &str) -> Vec<String> {
+    input
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn main() -> Result<()> {
     let args = Args::parse();
-    let patterns: Vec<String> = args
-        .file_patterns
-        .iter()
-        .map(|x| x.split(',').collect::<Vec<_>>())
-        .flatten()
-        .map(|x| x.trim().to_string())
-        .collect();
-
-    // merge the ignore files and ignore folders with const ignored files and folders
-
-    let mut ignored_files_list: Vec<String> = IGNORED_FILES.iter().map(|x| x.to_string()).collect();
-    let mut ignored_folders_list: Vec<String> =
-        IGNORED_FOLDERS.iter().map(|x| x.to_string()).collect();
-
-    if args.ignore_files != None && args.ignore_files.is_some() {
-        ignored_files_list.extend(
-            args.ignore_files
-                .as_ref()
-                .unwrap()
-                .split(',')
-                .map(|x| x.trim().to_string())
-                .collect::<Vec<_>>(),
-        );
-    }
-
-    if args.ignore_folders != None && args.ignore_folders.is_some() {
-        ignored_folders_list.extend(
-            args.ignore_folders
-                .as_ref()
-                .unwrap()
-                .split(',')
-                .map(|x| x.trim().to_string())
-                .collect::<Vec<_>>(),
-        );
-    }
-
 
     if args.list_templates {
         return list_all_templates();
     }
 
+    let file_patterns = parse_comma_separated(&args.file_patterns);
+    
+    let mut ignored_files: Vec<String> = IGNORED_FILES.iter().map(|&s| s.to_string()).collect();
+    let mut ignored_folders: Vec<String> = IGNORED_FOLDERS.iter().map(|&s| s.to_string()).collect();
+
+    if let Some(ref ignore_files) = args.ignore_files {
+        ignored_files.extend(parse_comma_separated(ignore_files));
+    }
+
+    if let Some(ref ignore_folders) = args.ignore_folders {
+        ignored_folders.extend(parse_comma_separated(ignore_folders));
+    }
+
     let config = Config {
         dir_path: args.dir_path,
-        file_patterns: patterns,
+        file_patterns,
         output_file: args.output_file,
         lines: args.lines,
-        clean_input_enabled: args.clean_input_enabled,
+        clean_input_enabled: Some(args.clean_input_enabled),
         files: args.files,
-        ignored_files: ignored_files_list,
-        ignored_folders: ignored_folders_list,
+        ignored_files,
+        ignored_folders,
         template: args.template,
         path_template: args.path_template,
     };
 
-    process_files(&config)?;
-    Ok(())
+    process_files(&config)
 }
 
-fn split_content(content: &str, lines: i32) -> String {
-    let mut result = String::new();
-    let mut count = 0;
-    for line in content.lines() {
-        if lines != -1 && count >= lines {
-            break;
-        }
-        result.push_str(line);
-        result.push_str("\n");
-        count += 1;
+fn split_content(content: &str, max_lines: i32) -> String {
+    if max_lines <= 0 {
+        return content.to_string();
     }
-    result
+    
+    content
+        .lines()
+        .take(max_lines as usize)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
-fn render_template(template_name: &str, content: &str) -> Result<String, tera::Error> {
-    // Find the template file
+fn render_template(template_name: &str, content: &str) -> Result<String> {
     let template_content = find_template_file(template_name)?;
-
-    // print!("{}", template_content);
-
-    // Initialize Tera
+    
     let mut tera = Tera::default();
     tera.add_raw_template("template", &template_content)?;
 
-    // Create a context and add variables
     let mut context = Context::new();
     context.insert("code", content);
 
-    // Render the template
-    let rendered = tera.render("template", &context)?;
-    // println!("{}", rendered);
-    Ok(rendered)
+    Ok(tera.render("template", &context)?)
 }
 
-fn process_files(config: &Config) -> Result<(), std::io::Error> {
-    // println!("{:?}", config);
-
-    // ignore the output file if mode is stdout
-    let mut output: Box<dyn Write> = Box::new(io::stdout());
-
-    if !config.output_file.is_empty() {
-        output = Box::new(io::BufWriter::new(fs::File::create(&config.output_file)?));
-    }
-
-    // deprecated but i will keep it for now
-    // if config.files != None && config.files.is_some() {
-    //     for file in config.files.as_ref().unwrap() {
-    //         let path = Path::new(file);
-    //         write_output(&mut output, &path.to_path_buf(), &config)?;
-    //     }
-    //     return Ok(());
-    // }
-
-    if config.files != None && config.files.is_some() {
-        let files = config.files.as_ref().unwrap();
-        let raw_text_output =
-            collect_output(files.iter().map(|x| PathBuf::from(x)).collect(), &config)?;
-        let rendered = render_template(&config.template, raw_text_output.as_str());
-        println!("{}", rendered.unwrap());
-        return Ok(());
-    }
-
-    // traversal the directory and get all files using threading
-    let files = traverse(
-        Path::new(&config.dir_path).to_path_buf(),
-        config.file_patterns.clone(),
-        config.clone(),
-    );
-
-    // deprecated but i will keep it for now
-    // for file in files {
-    //     let file_name = file.file_name().unwrap().to_str().unwrap();
-    //     let file_name_ext = file_name.split('.').last().unwrap();
-
-    //     if config.file_patterns.contains(&file_name_ext.to_string()) {
-    //         write_output(&mut output, &file, &config)?;
-    //     }
-    // }
-
-    let raw_text_output = collect_output(files, &config)?;
-
-    let rendered: Result<String, tera::Error>;
-    // check if using specific path template
-    if !config.path_template.is_none() {
-        rendered = render_template(&config.path_template.as_ref().unwrap(), raw_text_output.as_str());
-    }
-    else {
-        rendered = render_template(&config.template, raw_text_output.as_str());
-    }
-
-    let rendered_clone = rendered.unwrap().clone(); // Clone the value of rendered
-
-    io::stdout().write_all(rendered_clone.as_bytes())?; // Print the cloned value of rendered
-
-    // save output to file
-    if !config.output_file.is_empty() {
-        fs::write(&config.output_file, rendered_clone)?; // Use the cloned value of rendered
-    }
-
-    Ok(())
-}
-
-#[warn(dead_code)]
-fn write_output(
-    output: &mut dyn Write,
-    file: &PathBuf,
-    config: &Config,
-) -> Result<(), std::io::Error> {
-    let file_name = file.file_name().unwrap().to_str().unwrap();
-    writeln!(
-        output,
-        "\n{}/{}",
-        file.parent().unwrap().display(),
-        file_name
-    )?;
-    // write '=' 16 times
-    // writeln!(output, "=")?;
-    writeln!(output, "{:`<1$}", "", 3)?;
-
-    let content = fs::read(&file)?;
-    let mut content_str = String::from_utf8_lossy(&content);
-    if config.lines.unwrap() != -1 {
-        content_str = split_content(&content_str, config.lines.unwrap()).into();
-    }
-    if config.clean_input_enabled.unwrap() {
-        let pattern = Regex::new(r"[\r\n\t\s]+").unwrap();
-        let replaced_content_str = pattern.replace_all(&content_str, " ");
-        writeln!(output, "{}", replaced_content_str)?;
+fn process_files(config: &Config) -> Result<()> {
+    let files = if let Some(ref file_list) = config.files {
+        file_list.iter().map(PathBuf::from).collect()
     } else {
-        writeln!(output, "{}", content_str)?;
+        traverse(
+            PathBuf::from(&config.dir_path),
+            config.file_patterns.clone(),
+            config.clone(),
+        )
+    };
+
+    let raw_output = collect_output(files, config)?;
+    
+    let template_name = config.path_template.as_ref().unwrap_or(&config.template);
+    let rendered = render_template(template_name, &raw_output)?;
+
+    // Output to stdout
+    io::stdout().write_all(rendered.as_bytes())?;
+
+    // Save to file if specified
+    if !config.output_file.is_empty() {
+        let mut file = BufWriter::new(fs::File::create(&config.output_file)?);
+        file.write_all(rendered.as_bytes())?;
+        file.flush()?;
     }
-    writeln!(output, "{:`<1$}", "", 3)?;
+
     Ok(())
 }
 
-fn collect_output(files: Vec<PathBuf>, config: &Config) -> Result<String, std::io::Error> {
-    let mut output = String::new();
-    for file in files {
-        let file_name = file.file_name().unwrap().to_str().unwrap();
-        output.push_str(&format!(
-            "\n{}/{}\n",
-            file.parent().unwrap().display(),
-            file_name
-        ));
-        output.push_str(&format!("{:`<1$}\n", "", 3));
+fn collect_output(files: Vec<PathBuf>, config: &Config) -> Result<String> {
+    let clean_regex = if config.clean_input_enabled.unwrap_or(false) {
+        Some(Regex::new(r"[\r\n\t\s]+")?)
+    } else {
+        None
+    };
 
-        let content = fs::read(&file)?;
-        let mut content_str = String::from_utf8_lossy(&content);
-        if config.lines.unwrap() != -1 {
-            content_str = split_content(&content_str, config.lines.unwrap()).into();
-        }
-        if config.clean_input_enabled.unwrap() {
-            let pattern = Regex::new(r"[\r\n\t\s]+").unwrap();
-            let replaced_content_str = pattern.replace_all(&content_str, " ");
-            output.push_str(&format!("{}", replaced_content_str));
-        } else {
-            output.push_str(&format!("{}", content_str));
-        }
-        output.push_str(&format!("\n{:`<1$}", "", 3));
-    }
-    Ok(output)
+    let results: Result<Vec<String>> = files
+        .par_iter()
+        .map(|file| -> Result<String> {
+            let mut result = String::new();
+            
+            let file_name = file.file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| AppError("Invalid file name".to_string()))?;
+            
+            let parent_path = file.parent()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| ".".to_string());
+
+            result.push_str(&format!("\n{}/{}\n", parent_path, file_name));
+            result.push_str(&format!("{:-<1$}\n", "", 3));
+
+            let content = fs::read_to_string(file)?;
+            
+            let processed_content = if let Some(max_lines) = config.lines {
+                split_content(&content, max_lines)
+            } else {
+                content
+            };
+
+            let final_content = if let Some(ref regex) = clean_regex {
+                regex.replace_all(&processed_content, " ").to_string()
+            } else {
+                processed_content
+            };
+
+            result.push_str(&final_content);
+            result.push_str(&format!("\n{:-<1$}\n", "", 3));
+            
+            Ok(result)
+        })
+        .collect();
+
+    Ok(results?.join(""))
 }
