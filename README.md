@@ -4,7 +4,78 @@ Provice a list of files to prompt and explain the content of the files.
 
 ## Brief description
 
-![alt text](images/mermaid-diagram-2025-05-28-091525.png)
+```mermaid
+flowchart TD
+ subgraph Configuration["Configuration"]
+        B["Config Struct\nInitialization"]
+  end
+ subgraph subGraph1["Directory Traversal"]
+        H["Add to Queue\nfor Traversal"]
+        G{"Ignored Folders\nand Files Check"}
+        F["Filter Directories\nand Files"]
+        E["Traverse Function"]
+        I["Collect Files\nwith Matching Extensions"]
+  end
+ subgraph subGraph2["File Processing"]
+        K["Process Content\nLimit Lines, Clean Input"]
+        J["Collect Output\nFunction"]
+  end
+ subgraph subGraph3["Template Rendering"]
+        N["Render with Tera\nEngine"]
+        M{"Embedded or Custom\nTemplate File"}
+        L["Render Template\nFunction"]
+  end
+ subgraph subGraph4["Output Handling"]
+        P["Save to Output File"]
+        O["Output to Stdout\nand/or File"]
+        Q["Display on Console"]
+  end
+    A["Command Line Input\nArgs Parsing"] -- User Inputs --> B
+    B -- Configuration Data --> C["Process Files\nFunction"]
+    C -- File List or Directory Traversal --> D{"Traverse Directory\nor Use Provided Files"}
+    D -- Directory Path --> E
+    E -- Read Directory --> F
+    F -- Ignore Rules --> G
+    G -- Valid Directories --> H
+    G -- Valid Files --> I
+    H -- Continue Traversal --> E
+    I -- File Paths --> J
+    D -- Provided Files --> J
+    J -- Read File Contents --> K
+    K -- Format Content --> L
+    L -- Select Template --> M
+    M -- Template Content --> N
+    N -- Formatted Output --> O
+    O -- Write to File if Specified --> P
+    O -- Display --> Q
+    E --> F
+    F --> G
+    G --> H & I
+    J --> K
+    L --> M
+    M --> N
+    O --> P & Q
+    subGraph1 --> n1["Untitled Node"]
+
+    style B fill:#000,stroke:#fff,color:#fff
+    style H fill:#000,stroke:#fff,color:#fff
+    style G fill:#000,stroke:#fff,color:#fff
+    style F fill:#000,stroke:#fff,color:#fff
+    style E fill:#000,stroke:#fff,color:#fff
+    style I fill:#000,stroke:#fff,color:#fff
+    style K fill:#000,stroke:#fff,color:#fff
+    style J fill:#000,stroke:#fff,color:#fff
+    style N fill:#000,stroke:#fff,color:#fff
+    style M fill:#000,stroke:#fff,color:#fff
+    style L fill:#000,stroke:#fff,color:#fff
+    style P fill:#000,stroke:#fff,color:#fff
+    style O fill:#000,stroke:#fff,color:#fff
+    style Q fill:#000,stroke:#fff,color:#fff
+    style A fill:#000,stroke:#fff,color:#fff
+    style C fill:#000,stroke:#fff,color:#fff
+    style D fill:#000,stroke:#fff,color:#fff
+
+```
 
 Directory File Processor is a Rust-based command-line tool that recursively traverses directories, filters files based on specified extensions and criteria, processes their content, and renders the result using customizable templates.
 
